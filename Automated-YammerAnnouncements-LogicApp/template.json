@@ -516,7 +516,7 @@
                             "office365": {
                                 "connectionId": "[parameters('connections_office365_externalid')]",
                                 "connectionName": "office365",
-                                "id": "
+                                "id": ""
                             },
                             "yammer": {
                                 "connectionId": "[parameters('connections_yammer_externalid')]",

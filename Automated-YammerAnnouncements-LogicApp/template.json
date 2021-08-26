@@ -1,0 +1,532 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workflows_wrk_dev_yammer_name": {
+            "defaultValue": "wrk-yammer",
+            "type": "String"
+        },
+        "connections_bingsearch_1_externalid": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "connections_office365_externalid": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "connections_yammer_externalid": {
+            "defaultValue": "",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_wrk_dev_yammer_name')]",
+            "location": "eastus",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Week",
+                                "interval": 1,
+                                "schedule": {
+                                    "hours": [
+                                        "8"
+                                    ],
+                                    "minutes": [
+                                        0
+                                    ],
+                                    "weekDays": [
+                                        "Monday",
+                                        "Tuesday",
+                                        "Wednesday",
+                                        "Thursday",
+                                        "Friday"
+                                    ]
+                                }
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Add_Article_Header": {
+                            "runAfter": {
+                                "DailyUpdatePost_Variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "AppendToStringVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "<strong>Top News Articles for @{array(variables('SearchesArray'))[variables('RandIndex')]} Today:</strong>\n<br/><br/>"
+                            }
+                        },
+                        "Add_Footer_to_News_Article_Section": {
+                            "runAfter": {
+                                "Append_Bing_News_Articles": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "AppendToStringVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "<br/>\n<em>The above information is provided by a Bing Search Resource in Azure</em><br/>\n__________________________________________________"
+                            }
+                        },
+                        "Add_ending_Footer": {
+                            "runAfter": {
+                                "Add_event_subject_in": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "AppendToStringVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "__________________________________________________\n<br/>\n<br/>\n<em>@Runs Every Morning at 9:00AM</em>"
+                            }
+                        },
+                        "Add_event_subject_in": {
+                            "runAfter": {
+                                "Loop_Calendar_Events_that_Matched": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "AppendToStringVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "<br/>\n<em>The above information is provided by a Graph API Query Connector in The Logic App</em><br/>"
+                            }
+                        },
+                        "Append_Bing_News_Articles": {
+                            "foreach": "@body('List_news_by_query')",
+                            "actions": {
+                                "Append_to_string_variable": {
+                                    "runAfter": {},
+                                    "type": "AppendToStringVariable",
+                                    "inputs": {
+                                        "name": "DailyUpdatePost",
+                                        "value": "<strong>Title:</strong> @{items('Append_Bing_News_Articles')?['name']}<br/>\n<strong>Description:</strong> @{items('Append_Bing_News_Articles')?['description']}<br/>\n<strong>URL:</strong> @{items('Append_Bing_News_Articles')?['url']}<br/>\n<br/>"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Add_Article_Header": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "DailyUpdatePost_Variable": {
+                            "runAfter": {
+                                "List_news_by_query": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "DailyUpdatePost",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Filter_Calendar_Events_by_End_Time": {
+                            "runAfter": {
+                                "Filter_Calendar_Events_by_Start_Time": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Query",
+                            "inputs": {
+                                "from": "@body('Filter_Calendar_Events_by_Start_Time')",
+                                "where": "@equals(item()?['end'], formatDateTime(utcNow(), 'yyyy-MM-ddT16:00:00.0000000'))"
+                            }
+                        },
+                        "Filter_Calendar_Events_by_Start_Time": {
+                            "runAfter": {
+                                "Get_calendar_view_of_events_(V3)": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Query",
+                            "inputs": {
+                                "from": "@body('Get_calendar_view_of_events_(V3)')?['value']",
+                                "where": "@equals(item()?['start'], formatDateTime(utcNow(), 'yyyy-MM-ddT08:00:00.0000000'))"
+                            }
+                        },
+                        "Get_calendar_view_of_events_(V3)": {
+                            "runAfter": {
+                                "Null_the_DailyUpdatePost_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['office365']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/datasets/calendars/v3/tables/items/calendarview",
+                                "queries": {
+                                    "calendarId": "",
+                                    "endDateTimeUtc": "@{formatDateTime(utcNow(),'yyyy-MM-ddT19:00:00')}",
+                                    "startDateTimeUtc": "@{formatDateTime(utcNow(),'yyyy-MM-ddT08:00:00')}"
+                                }
+                            }
+                        },
+                        "List_news_by_query": {
+                            "runAfter": {
+                                "RandomIndex_Variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['bingsearch_1']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/news/search",
+                                "queries": {
+                                    "count": "3",
+                                    "mkt": "en-GB",
+                                    "q": "@{array(variables('SearchesArray'))[variables('RandIndex')]}",
+                                    "safeSearch": "Moderate"
+                                }
+                            }
+                        },
+                        "Loop_Calendar_Events_that_Matched": {
+                            "foreach": "@body('Parse_JSON')",
+                            "actions": {
+                                "Append_to_string_variable_3": {
+                                    "runAfter": {},
+                                    "type": "AppendToStringVariable",
+                                    "inputs": {
+                                        "name": "DailyUpdatePost",
+                                        "value": "@{items('Loop_Calendar_Events_that_Matched')['subject']}<br/><br/>"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Null_the_DailyUpdatePost_variable": {
+                            "runAfter": {
+                                "Post_Morning_Tech_News": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "@{null}"
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "What_Am_I_working_on_spacing": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Filter_Calendar_Events_by_End_Time')",
+                                "schema": {
+                                    "items": {
+                                        "properties": {
+                                            "body": {
+                                                "type": "string"
+                                            },
+                                            "categories": {
+                                                "type": "array"
+                                            },
+                                            "createdDateTime": {
+                                                "type": "string"
+                                            },
+                                            "end": {
+                                                "type": "string"
+                                            },
+                                            "endWithTimeZone": {
+                                                "type": "string"
+                                            },
+                                            "iCalUId": {
+                                                "type": "string"
+                                            },
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "importance": {
+                                                "type": "string"
+                                            },
+                                            "isAllDay": {
+                                                "type": "boolean"
+                                            },
+                                            "isHtml": {
+                                                "type": "boolean"
+                                            },
+                                            "isReminderOn": {
+                                                "type": "boolean"
+                                            },
+                                            "lastModifiedDateTime": {
+                                                "type": "string"
+                                            },
+                                            "location": {
+                                                "type": "string"
+                                            },
+                                            "numberOfOccurences": {},
+                                            "optionalAttendees": {
+                                                "type": "string"
+                                            },
+                                            "organizer": {
+                                                "type": "string"
+                                            },
+                                            "recurrence": {
+                                                "type": "string"
+                                            },
+                                            "recurrenceEnd": {},
+                                            "reminderMinutesBeforeStart": {
+                                                "type": "integer"
+                                            },
+                                            "requiredAttendees": {
+                                                "type": "string"
+                                            },
+                                            "resourceAttendees": {
+                                                "type": "string"
+                                            },
+                                            "responseRequested": {
+                                                "type": "boolean"
+                                            },
+                                            "responseTime": {
+                                                "type": "string"
+                                            },
+                                            "responseType": {
+                                                "type": "string"
+                                            },
+                                            "sensitivity": {
+                                                "type": "string"
+                                            },
+                                            "seriesMasterId": {},
+                                            "showAs": {
+                                                "type": "string"
+                                            },
+                                            "start": {
+                                                "type": "string"
+                                            },
+                                            "startWithTimeZone": {
+                                                "type": "string"
+                                            },
+                                            "subject": {
+                                                "type": "string"
+                                            },
+                                            "timeZone": {
+                                                "type": "string"
+                                            },
+                                            "webLink": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "subject",
+                                            "start",
+                                            "end",
+                                            "startWithTimeZone",
+                                            "endWithTimeZone",
+                                            "body",
+                                            "isHtml",
+                                            "responseType",
+                                            "responseTime",
+                                            "id",
+                                            "createdDateTime",
+                                            "lastModifiedDateTime",
+                                            "organizer",
+                                            "timeZone",
+                                            "seriesMasterId",
+                                            "iCalUId",
+                                            "categories",
+                                            "webLink",
+                                            "requiredAttendees",
+                                            "optionalAttendees",
+                                            "resourceAttendees",
+                                            "location",
+                                            "importance",
+                                            "isAllDay",
+                                            "recurrence",
+                                            "recurrenceEnd",
+                                            "numberOfOccurences",
+                                            "reminderMinutesBeforeStart",
+                                            "isReminderOn",
+                                            "showAs",
+                                            "responseRequested",
+                                            "sensitivity"
+                                        ],
+                                        "type": "object"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "Post_Morning_Tech_News": {
+                            "runAfter": {
+                                "Add_Footer_to_News_Article_Section": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "body": "@variables('DailyUpdatePost')",
+                                    "broadcast": true,
+                                    "group_id": 42938818560,
+                                    "title": "Automated - Top 3 Daily News Articles",
+                                    "topic1": "Daily Announcement",
+                                    "topic2": "Automated Post"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['yammer']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/messages.json",
+                                "queries": {
+                                    "network_id": "Default"
+                                }
+                            }
+                        },
+                        "Post_message": {
+                            "runAfter": {
+                                "Add_ending_Footer": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "body": "@variables('DailyUpdatePost')",
+                                    "broadcast": true,
+                                    "group_id": 42938818560,
+                                    "title": "What I'm working on Today",
+                                    "topic1": "Automated Post"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['yammer']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/messages.json",
+                                "queries": {
+                                    "network_id": "Default"
+                                }
+                            }
+                        },
+                        "RandomIndex_Variable": {
+                            "runAfter": {
+                                "SearchesArray_Length": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "RandIndex",
+                                        "type": "integer",
+                                        "value": "@rand(0,variables('SearchArrayLength'))"
+                                    }
+                                ]
+                            }
+                        },
+                        "SearchesArray_Length": {
+                            "runAfter": {
+                                "SearchesArray_Variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "SearchArrayLength",
+                                        "type": "integer",
+                                        "value": "@length(variables('SearchesArray'))"
+                                    }
+                                ]
+                            }
+                        },
+                        "SearchesArray_Variable": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "SearchesArray",
+                                        "type": "array",
+                                        "value": "@createArray('DevOps', 'Futurism', 'Software Development', 'Technology', 'Robotics', 'Digital Innovation', 'Artificial Intelligence')"
+                                    }
+                                ]
+                            }
+                        },
+                        "What_Am_I_working_on_spacing": {
+                            "runAfter": {
+                                "Filter_Calendar_Events_by_End_Time": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "AppendToStringVariable",
+                            "inputs": {
+                                "name": "DailyUpdatePost",
+                                "value": "<br/>\n<br/>"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "bingsearch_1": {
+                                "connectionId": "[parameters('connections_bingsearch_1_externalid')]",
+                                "connectionName": "bingsearch-1",
+                                "id": ""
+                            },
+                            "office365": {
+                                "connectionId": "[parameters('connections_office365_externalid')]",
+                                "connectionName": "office365",
+                                "id": "
+                            },
+                            "yammer": {
+                                "connectionId": "[parameters('connections_yammer_externalid')]",
+                                "connectionName": "yammer",
+                                "id": ""
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
